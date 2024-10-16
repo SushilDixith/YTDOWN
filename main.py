@@ -1,88 +1,97 @@
-from pytube import YouTube
+import yt_dlp
 
-def download_video(url, resolution=None, video_codec=None, audio_codec=None, download_type="both", bitrate=None):
-    yt = YouTube(url)
+def list_formats(url):
+    ydl_opts = {
+        'format': 'bestaudio+bestaudio/best'  # List both audio and video formats
+    }
+    
+    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        info_dict = ydl.extract_info(url, download=False)
+        formats = info_dict.get('formats', [])
+    
+    return formats
 
-    if download_type == "audio":
-        audio_stream = yt.streams.filter(only_audio=True, abr=bitrate).first()
-        if audio_stream:
-            print(f"Downloading audio: {audio_stream}")
-            audio_stream.download()
-        else:
-            print("No suitable audio stream found.")
+def get_audio_codecs(formats):
+    audio_codecs = set()
+    for f in formats:
+        if f.get('acodec') and f['acodec'] not in audio_codecs:
+            audio_codecs.add(f['acodec'])
+    return list(audio_codecs)
+
+def get_bitrates(formats, codec):
+    bitrates = set()
+    for f in formats:
+        if f.get('acodec') == codec:
+            bitrates.add(f.get('abr', 'N/A'))
+    return list(bitrates)
+
+def download_video(url, format_code):
+    ydl_opts = {
+        'format': format_code
+    }
     
-    elif download_type == "video":
-        video_stream = yt.streams.filter(res=resolution, subtype=video_codec).first()
-        if video_stream:
-            print(f"Downloading video: {video_stream}")
-            video_stream.download()
-        else:
-            print("No suitable video stream found.")
-    
-    elif download_type == "both":
-        video_stream = yt.streams.filter(res=resolution, subtype=video_codec).first()
-        audio_stream = yt.streams.filter(only_audio=True, abr=bitrate).first()
-        if video_stream and audio_stream:
-            print(f"Downloading video: {video_stream}")
-            video_stream.download()
-            print(f"Downloading audio: {audio_stream}")
-            audio_stream.download()
-        else:
-            print("No suitable video/audio stream found.")
-    else:
-        print("Invalid download type selected.")
+    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        ydl.download([url])
 
 def main():
     url = input("Enter the YouTube video URL: ")
-    yt = YouTube(url)
 
-    # Fetch available resolutions
-    available_streams = yt.streams.filter(progressive=True)
-    resolutions = list(set([stream.resolution for stream in available_streams if stream.resolution]))
-    resolutions.sort()
-    print("Available resolutions:")
-    for i, resolution in enumerate(resolutions):
-        print(f"{i+1}. {resolution}")
-    resolution_choice = int(input("Enter the number of your desired resolution: "))
-    resolution = resolutions[resolution_choice-1]
-
-    # Fetch available video codecs
-    video_codecs = list(set([stream.subtype for stream in available_streams]))
-    print("Available video codecs:")
-    for i, codec in enumerate(video_codecs):
-        print(f"{i+1}. {codec}")
-    video_codec_choice = int(input("Enter the number of your desired video codec: "))
-    video_codec = video_codecs[video_codec_choice-1]
-
-    # Fetch available audio codecs
-    audio_streams = yt.streams.filter(only_audio=True)
-    audio_codecs = list(set([stream.audio_codec for stream in audio_streams if stream.audio_codec]))
-    print("Available audio codecs:")
-    for i, codec in enumerate(audio_codecs):
-        print(f"{i+1}. {codec}")
-    audio_codec_choice = int(input("Enter the number of your desired audio codec: "))
-    audio_codec = audio_codecs[audio_codec_choice-1]
-
-    # Fetch available bitrates if MP3
-    bitrate = None
-    if audio_codec == "mp3":
-        bitrates = list(set([stream.abr for stream in audio_streams if stream.abr]))
-        print("Available bitrates (kbps):")
-        for i, rate in enumerate(bitrates):
-            print(f"{i+1}. {rate}")
-        bitrate_choice = int(input("Enter the number of your desired bitrate: "))
-        bitrate = bitrates[bitrate_choice-1]
+    # List available formats
+    formats = list_formats(url)
+    if not formats:
+        print("No formats available for this video.")
+        return
 
     # Download options
-    print("Download options:")
+    print("\nDownload options:")
     print("1. Audio only")
     print("2. Video only")
     print("3. Both audio and video")
     download_type_choice = int(input("Enter the number of your desired download type: "))
-    download_type = ["audio", "video", "both"][download_type_choice-1]
+    
+    if download_type_choice == 1:
+        audio_codecs = get_audio_codecs(formats)
+        print("\nAvailable audio codecs:")
+        for i, codec in enumerate(audio_codecs):
+            print(f"{i+1}. {codec}")
+        codec_choice = int(input("Select the audio codec: ")) - 1
+        selected_codec = audio_codecs[codec_choice]
 
-    # Start downloading
-    download_video(url, resolution, video_codec, audio_codec, download_type, bitrate)
+        if selected_codec == "mp3":
+            bitrates = get_bitrates(formats, selected_codec)
+            print("\nAvailable bitrates (kbps):")
+            for i, rate in enumerate(bitrates):
+                print(f"{i+1}. {rate} kbps")
+            bitrate_choice = int(input("Select the desired bitrate: ")) - 1
+            selected_bitrate = bitrates[bitrate_choice]
+            format_code = f"bestaudio[abr<={selected_bitrate}]"
+        else:
+            format_code = f"bestaudio[acodec={selected_codec}]"
+
+        print(f"Downloading audio with codec: {selected_codec} and bitrate: {selected_bitrate}")
+        download_video(url, format_code)
+        
+    elif download_type_choice == 2:
+        print("Available video formats:")
+        video_formats = [f for f in formats if f.get('vcodec')]
+        for i, f in enumerate(video_formats):
+            print(f"{i+1}. Format code: {f['format_id']}, Resolution: {f.get('height', 'N/A')}p, Codec: {f['vcodec']}, Bitrate: {f.get('tbr', 'N/A')} kbps")
+        video_choice = int(input("Select the desired video format: ")) - 1
+        format_code = video_formats[video_choice]['format_id']
+        print(f"Downloading video with format code: {format_code}")
+        download_video(url, format_code)
+        
+    elif download_type_choice == 3:
+        print("Available formats:")
+        for i, f in enumerate(formats):
+            print(f"{i+1}. Format code: {f['format_id']}, Resolution: {f.get('height', 'N/A')}p, Codec: {f.get('vcodec', 'none')} / {f.get('acodec', 'none')}, Bitrate: {f.get('tbr', 'N/A')} kbps")
+        format_choice = int(input("Select the desired format: ")) - 1
+        format_code = formats[format_choice]['format_id']
+        print(f"Downloading audio and video with format code: {format_code}")
+        download_video(url, format_code)
+
+    else:
+        print("Invalid download type selected.")
 
 if __name__ == "__main__":
     main()
