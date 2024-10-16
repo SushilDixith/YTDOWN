@@ -1,4 +1,16 @@
 import yt_dlp
+from tqdm import tqdm
+
+# Function to show progress bar during download using tqdm
+def progress_hook(tq):
+    def inner(d):
+        if d['status'] == 'downloading':
+            tq.total = d['total_bytes'] or 0
+            tq.update(d['downloaded_bytes'] - tq.n)
+        elif d['status'] == 'finished':
+            tq.close()
+            print(f"\nDownload completed. File saved to {d['filename']}")
+    return inner
 
 def list_formats(url):
     ydl_opts = {
@@ -26,12 +38,14 @@ def get_bitrates(formats, codec):
     return list(bitrates)
 
 def download_video(url, format_code):
-    ydl_opts = {
-        'format': format_code
-    }
-    
-    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        ydl.download([url])
+    with tqdm(unit="B", unit_scale=True, unit_divisor=1024, miniters=1, desc="Downloading") as tq:
+        ydl_opts = {
+            'format': format_code,
+            'progress_hooks': [progress_hook(tq)],  # Add progress hook to show the download progress
+        }
+        
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            ydl.download([url])
 
 def main():
     url = input("Enter the YouTube video URL: ")
@@ -68,7 +82,7 @@ def main():
         else:
             format_code = f"bestaudio[acodec={selected_codec}]"
 
-        print(f"Downloading audio with codec: {selected_codec} and bitrate: {selected_bitrate}")
+        print(f"Downloading audio with codec: {selected_codec}")
         download_video(url, format_code)
         
     elif download_type_choice == 2:
