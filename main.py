@@ -1,8 +1,7 @@
 import yt_dlp
 from tqdm import tqdm
 
-
-# Function to show progress bar during download using tqdm
+# Progress bar hook to show progress
 def progress_hook(tq):
     def inner(d):
         if d['status'] == 'downloading':
@@ -14,18 +13,16 @@ def progress_hook(tq):
     return inner
 
 
+# Fetch available formats from the YouTube URL
 def list_formats(url):
-    ydl_opts = {
-        'format': 'bestaudio+bestaudio/best'  # List both audio and video formats
-    }
-
+    ydl_opts = {'format': 'bestaudio+bestaudio/best'}
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         info_dict = ydl.extract_info(url, download=False)
         formats = info_dict.get('formats', [])
-
     return formats
 
 
+# Fetch all available audio codecs
 def get_audio_codecs(formats):
     audio_codecs = set()
     for f in formats:
@@ -34,6 +31,7 @@ def get_audio_codecs(formats):
     return list(audio_codecs)
 
 
+# Fetch bitrates for a specific audio codec (MP3, etc.)
 def get_bitrates(formats, codec):
     bitrates = set()
     for f in formats:
@@ -42,13 +40,13 @@ def get_bitrates(formats, codec):
     return list(bitrates)
 
 
+# Function to download video or audio with progress tracking
 def download_video(url, format_code):
     with tqdm(unit="B", unit_scale=True, unit_divisor=1024, miniters=1, desc="Downloading") as tq:
         ydl_opts = {
             'format': format_code,
-            'progress_hooks': [progress_hook(tq)],  # Add progress hook to show the download progress
+            'progress_hooks': [progress_hook(tq)],  # Use progress bar during download
         }
-
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             ydl.download([url])
 
@@ -56,18 +54,18 @@ def download_video(url, format_code):
 def main():
     url = input("Enter the YouTube video URL: ")
 
-    # List available formats
+    # List all available formats
     formats = list_formats(url)
     if not formats:
         print("No formats available for this video.")
         return
 
-    # Download options
+    # Download options: Audio, Video, or Both
     print("\nDownload options:")
     print("1. Audio only")
     print("2. Video only")
     print("3. Both audio and video")
-    
+
     try:
         download_type_choice = int(input("Enter the number of your desired download type: "))
     except ValueError:
@@ -75,6 +73,7 @@ def main():
         return
 
     if download_type_choice == 1:
+        # Fetch and list available audio codecs
         audio_codecs = get_audio_codecs(formats)
         if not audio_codecs:
             print("No audio formats available.")
@@ -94,7 +93,7 @@ def main():
 
         selected_codec = audio_codecs[codec_choice]
 
-        # Check for bitrates if the codec is MP3
+        # If codec is MP3, show available bitrates
         if selected_codec == "mp3":
             bitrates = get_bitrates(formats, selected_codec)
             if bitrates:
