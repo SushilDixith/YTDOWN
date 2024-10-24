@@ -1,5 +1,6 @@
 import yt_dlp
 from tqdm import tqdm
+import os
 
 def progress_hook(tq):
     def inner(d):
@@ -19,32 +20,26 @@ def list_formats(url):
     return formats
 
 def get_audio_codecs(formats):
-    audio_codecs = set()
-    for f in formats:
-        if f.get('acodec') and f['acodec'] != 'none':
-            audio_codecs.add(f['acodec'])
-    return list(audio_codecs)
+    return list(set(f['acodec'] for f in formats if f.get('acodec') and f['acodec'] != 'none'))
 
 def get_bitrates(formats, codec):
-    bitrates = set()
-    for f in formats:
-        if f.get('acodec') == codec and f.get('abr'):
-            bitrates.add(f.get('abr', 'N/A'))
-    return list(bitrates)
+    return list(set(f.get('abr', 'N/A') for f in formats if f.get('acodec') == codec and f.get('abr')))
 
-def download_video(url, format_code):
+def download_video(url, format_code, output_path):
     with tqdm(unit="B", unit_scale=True, unit_divisor=1024, miniters=1, desc="Downloading") as tq:
         ydl_opts = {
             'format': format_code,
-            'progress_hooks': [progress_hook(tq)],  
+            'progress_hooks': [progress_hook(tq)],
+            'outtmpl': os.path.join(output_path, '%(title)s.%(ext)s')
         }
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            ydl.download([url])
-
+            try:
+                ydl.download([url])
+            except Exception as e:
+                print(f"An error occurred during download: {e}")
 
 def main():
     url = input("Enter the YouTube video URL: ")
-
     formats = list_formats(url)
     if not formats:
         print("No formats available for this video.")
@@ -54,15 +49,16 @@ def main():
     print("1. Audio only")
     print("2. Video only")
     print("3. Both audio and video")
-
+    
     try:
         download_type_choice = int(input("Enter the number of your desired download type: "))
     except ValueError:
         print("Invalid input. Please enter a number (1, 2, or 3).")
         return
 
+    output_path = input("Enter the download directory (leave empty for current directory): ") or os.getcwd()
+
     if download_type_choice == 1:
-        
         audio_codecs = get_audio_codecs(formats)
         if not audio_codecs:
             print("No audio formats available.")
@@ -81,7 +77,6 @@ def main():
             return
 
         selected_codec = audio_codecs[codec_choice]
-
         if selected_codec == "mp3":
             bitrates = get_bitrates(formats, selected_codec)
             if bitrates:
@@ -96,7 +91,6 @@ def main():
                 except ValueError:
                     print("Invalid input. Please enter a number.")
                     return
-
                 selected_bitrate = bitrates[bitrate_choice]
                 format_code = f"bestaudio[abr<={selected_bitrate}]"
             else:
@@ -104,9 +98,8 @@ def main():
                 return
         else:
             format_code = f"bestaudio[acodec={selected_codec}]"
-
         print(f"Downloading audio with codec: {selected_codec}")
-        download_video(url, format_code)
+        download_video(url, format_code, output_path)
 
     elif download_type_choice == 2:
         print("Available video formats:")
@@ -128,7 +121,7 @@ def main():
 
         format_code = video_formats[video_choice]['format_id']
         print(f"Downloading video with format code: {format_code}")
-        download_video(url, format_code)
+        download_video(url, format_code, output_path)
 
     elif download_type_choice == 3:
         print("Available formats:")
@@ -145,11 +138,10 @@ def main():
 
         format_code = formats[format_choice]['format_id']
         print(f"Downloading audio and video with format code: {format_code}")
-        download_video(url, format_code)
+        download_video(url, format_code, output_path)
 
     else:
         print("Invalid download type selected.")
-
 
 if __name__ == "__main__":
     main()
